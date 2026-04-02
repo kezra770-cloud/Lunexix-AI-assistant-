@@ -35,8 +35,14 @@ import LiveVoiceChat from './components/LiveVoiceChat';
 import MusicPlayer from './components/MusicPlayer';
 import VideoFeed from './components/VideoFeed';
 import MusicSearchFilters from './components/MusicSearchFilters';
+import AuthButton from './components/AuthButton';
+import AdminDashboard from './components/AdminDashboard';
+import { auth, db } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, doc, setDoc, onSnapshot, deleteDoc, getDocs } from 'firebase/firestore';
+import { Shield } from 'lucide-react';
 
-const MODES: { id: ChatMode; label: string; icon: any; color: string }[] = [
+const MODES: { id: ChatMode | 'admin'; label: string; icon: any; color: string }[] = [
   { id: 'general', label: 'General', icon: Sparkles, color: 'text-lunexix-primary' },
   { id: 'dj', label: 'DJ Bot', icon: Music, color: 'text-pink-500' },
   { id: 'social', label: 'Social', icon: Share2, color: 'text-blue-500' },
@@ -57,38 +63,129 @@ export default function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [isLiveOpen, setIsLiveOpen] = useState(false);
   const [playlist, setPlaylist] = useState<Song[]>([]);
-  const [savedPlaylists, setSavedPlaylists] = useState<{ name: string, songs: Song[] }[]>([]);
+  const [savedPlaylists, setSavedPlaylists] = useState<{ id?: string, name: string, songs: Song[] }[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem('lunexix_playlists');
-    if (stored) {
-      try {
-        setSavedPlaylists(JSON.parse(stored));
-      } catch (e) {
-        console.error('Failed to parse saved playlists', e);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        // Check if user is admin
+        try {
+          const userDoc = await getDocs(collection(db, 'users'));
+          const userData = userDoc.docs.find(d => d.id === currentUser.uid)?.data();
+          setIsAdmin(userData?.role === 'admin' || currentUser.email === 'kezra770@gmail.com');
+        } catch (e) {
+          console.error("Error checking admin status", e);
+        }
+      } else {
+        setIsAdmin(false);
+        setShowAdmin(false);
+        // Fallback to local storage if not logged in
+        const stored = localStorage.getItem('lunexix_playlists');
+        if (stored) {
+          try {
+            setSavedPlaylists(JSON.parse(stored));
+          } catch (e) {
+            console.error('Failed to parse saved playlists', e);
+          }
+        }
+        setMessages([]);
       }
-    }
+    });
+    return () => unsubscribe();
   }, []);
 
-  const savePlaylist = (name: string) => {
-    const newSaved = [...savedPlaylists, { name, songs: playlist }];
-    setSavedPlaylists(newSaved);
-    localStorage.setItem('lunexix_playlists', JSON.stringify(newSaved));
+  // Sync playlists from Firestore
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = onSnapshot(collection(db, 'users', user.uid, 'playlists'), (snapshot) => {
+      const playlistsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name,
+        songs: doc.data().songs
+      }));
+      setSavedPlaylists(playlistsData);
+    }, (error) => {
+      console.error("Error fetching playlists:", error);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  // Sync chat history from Firestore when mode changes
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = onSnapshot(doc(db, 'users', user.uid, 'chats', mode), (docSnap) => {
+      if (docSnap.exists()) {
+        setMessages(docSnap.data().messages || []);
+      } else {
+        setMessages([]);
+      }
+    }, (error) => {
+      console.error("Error fetching chat history:", error);
+    });
+    return () => unsubscribe();
+  }, [user, mode]);
+
+  const savePlaylist = async (name: string) => {
+    if (user) {
+      const playlistId = Math.random().toString(36).substr(2, 9);
+      try {
+        await setDoc(doc(db, 'users', user.uid, 'playlists', playlistId), {
+          uid: user.uid,
+          name,
+          songs: playlist,
+          createdAt: Date.now()
+        });
+      } catch (error) {
+        console.error("Error saving playlist:", error);
+      }
+    } else {
+      const newSaved = [...savedPlaylists, { name, songs: playlist }];
+      setSavedPlaylists(newSaved);
+      localStorage.setItem('lunexix_playlists', JSON.stringify(newSaved));
+    }
   };
 
-  const renamePlaylist = (index: number, newName: string) => {
-    const newSaved = [...savedPlaylists];
-    newSaved[index].name = newName;
-    setSavedPlaylists(newSaved);
-    localStorage.setItem('lunexix_playlists', JSON.stringify(newSaved));
+  const renamePlaylist = async (index: number, newName: string) => {
+    if (user) {
+      const playlistToRename = savedPlaylists[index];
+      if (playlistToRename.id) {
+        try {
+          await setDoc(doc(db, 'users', user.uid, 'playlists', playlistToRename.id), {
+            name: newName
+          }, { merge: true });
+        } catch (error) {
+          console.error("Error renaming playlist:", error);
+        }
+      }
+    } else {
+      const newSaved = [...savedPlaylists];
+      newSaved[index].name = newName;
+      setSavedPlaylists(newSaved);
+      localStorage.setItem('lunexix_playlists', JSON.stringify(newSaved));
+    }
   };
 
-  const deletePlaylist = (index: number) => {
-    const newSaved = savedPlaylists.filter((_, i) => i !== index);
-    setSavedPlaylists(newSaved);
-    localStorage.setItem('lunexix_playlists', JSON.stringify(newSaved));
+  const deletePlaylist = async (index: number) => {
+    if (user) {
+      const playlistToDelete = savedPlaylists[index];
+      if (playlistToDelete.id) {
+        try {
+          await deleteDoc(doc(db, 'users', user.uid, 'playlists', playlistToDelete.id));
+        } catch (error) {
+          console.error("Error deleting playlist:", error);
+        }
+      }
+    } else {
+      const newSaved = savedPlaylists.filter((_, i) => i !== index);
+      setSavedPlaylists(newSaved);
+      localStorage.setItem('lunexix_playlists', JSON.stringify(newSaved));
+    }
   };
 
   const exportPlaylist = (index: number) => {
@@ -144,18 +241,47 @@ export default function App() {
       timestamp: Date.now(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    
+    if (user) {
+      try {
+        await setDoc(doc(db, 'users', user.uid, 'chats', mode), {
+          uid: user.uid,
+          mode: mode,
+          messages: newMessages,
+          updatedAt: Date.now()
+        });
+      } catch (error) {
+        console.error("Error saving chat:", error);
+      }
+    }
+
     if (typeof overrideInput !== 'string') setInput('');
     setIsTyping(true);
 
     try {
-      const responseText = await generateChatResponse(mode, messages, textToSend);
+      const responseText = await generateChatResponse(mode, newMessages, textToSend);
       const modelMessage: Message = {
         role: 'model',
         text: responseText,
         timestamp: Date.now(),
       };
-      setMessages(prev => [...prev, modelMessage]);
+      const finalMessages = [...newMessages, modelMessage];
+      setMessages(finalMessages);
+      
+      if (user) {
+        try {
+          await setDoc(doc(db, 'users', user.uid, 'chats', mode), {
+            uid: user.uid,
+            mode: mode,
+            messages: finalMessages,
+            updatedAt: Date.now()
+          });
+        } catch (error) {
+          console.error("Error saving chat:", error);
+        }
+      }
     } catch (error) {
       console.error('Chat error:', error);
     } finally {
@@ -163,8 +289,15 @@ export default function App() {
     }
   };
 
-  const clearChat = () => {
+  const clearChat = async () => {
     setMessages([]);
+    if (user) {
+      try {
+        await deleteDoc(doc(db, 'users', user.uid, 'chats', mode));
+      } catch (error) {
+        console.error("Error clearing chat:", error);
+      }
+    }
   };
 
   const addToPlaylist = (songStr: string) => {
@@ -307,22 +440,34 @@ export default function App() {
           {MODES.map((m) => (
             <button
               key={m.id}
-              onClick={() => setMode(m.id)}
+              onClick={() => { setMode(m.id as ChatMode); setShowAdmin(false); }}
               className={cn(
                 "w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 group",
-                mode === m.id 
+                mode === m.id && !showAdmin
                   ? "bg-white/10 text-white" 
                   : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
               )}
             >
-              <m.icon className={cn("w-5 h-5", mode === m.id ? m.color : "group-hover:text-slate-200")} />
+              <m.icon className={cn("w-5 h-5", mode === m.id && !showAdmin ? m.color : "group-hover:text-slate-200")} />
               <span className="hidden md:block font-medium">{m.label}</span>
-              {mode === m.id && <ChevronRight className="hidden md:block ml-auto w-4 h-4 text-slate-500" />}
+              {mode === m.id && !showAdmin && <ChevronRight className="hidden md:block ml-auto w-4 h-4 text-slate-500" />}
             </button>
           ))}
         </nav>
 
         <div className="p-4 border-t border-white/5 space-y-2">
+          {isAdmin && (
+            <button 
+              onClick={() => setShowAdmin(true)}
+              className={cn(
+                "w-full flex items-center gap-3 p-3 rounded-xl transition-all",
+                showAdmin ? "bg-emerald-500/10 text-emerald-500" : "text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-500"
+              )}
+            >
+              <Shield className="w-5 h-5" />
+              <span className="hidden md:block font-medium">Admin</span>
+            </button>
+          )}
           <button 
             onClick={() => setIsLiveOpen(true)}
             className="w-full flex items-center gap-3 p-3 rounded-xl bg-lunexix-primary/10 text-lunexix-primary hover:bg-lunexix-primary/20 transition-all"
@@ -345,12 +490,12 @@ export default function App() {
         {/* Header */}
         <header className="h-20 glass-panel border-b border-white/5 flex items-center justify-between px-8 z-10">
           <div className="flex items-center gap-4">
-            <div className={cn("p-2 rounded-lg bg-white/5", MODES.find(m => m.id === mode)?.color)}>
-              {React.createElement(MODES.find(m => m.id === mode)?.icon || Sparkles, { className: "w-5 h-5" })}
+            <div className={cn("p-2 rounded-lg bg-white/5", showAdmin ? "text-emerald-500" : MODES.find(m => m.id === mode)?.color)}>
+              {React.createElement(showAdmin ? Shield : (MODES.find(m => m.id === mode)?.icon || Sparkles), { className: "w-5 h-5" })}
             </div>
             <div>
               <h2 className="font-display font-bold text-lg text-white">
-                {MODES.find(m => m.id === mode)?.label} Assistant
+                {showAdmin ? 'Admin Dashboard' : `${MODES.find(m => m.id === mode)?.label} Assistant`}
               </h2>
               <p className="text-xs text-slate-400 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -362,14 +507,18 @@ export default function App() {
             <button className="p-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all">
               <Settings className="w-5 h-5" />
             </button>
-            <div className="w-10 h-10 rounded-xl bg-slate-800 border border-white/10 flex items-center justify-center">
-              <User className="w-5 h-5 text-slate-300" />
-            </div>
+            <AuthButton />
           </div>
         </header>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-hide">
+        {showAdmin ? (
+          <div className="flex-1 overflow-y-auto scrollbar-hide">
+            <AdminDashboard />
+          </div>
+        ) : (
+          <>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-hide">
           {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-6">
               <div className="w-20 h-20 rounded-3xl bg-lunexix-primary/10 flex items-center justify-center animate-bounce">
@@ -627,10 +776,12 @@ export default function App() {
             Powered by Gemini 3.1 Pro • Lunexix AI Assistant
           </p>
         </div>
+        </>
+        )}
       </main>
 
       {/* Music Player */}
-      {mode === 'dj' && (
+      {mode === 'dj' && !showAdmin && playlist.length > 0 && (
         <MusicPlayer 
           playlist={playlist} 
           onRemoveFromPlaylist={removeFromPlaylist}

@@ -8,15 +8,17 @@
         "uid": { "type": "string" },
         "email": { "type": "string" },
         "displayName": { "type": "string" },
-        "photoURL": { "type": "string" }
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
       },
       "required": ["uid", "email"]
     },
     "Playlist": {
       "title": "Playlist",
-      "description": "A collection of songs",
+      "description": "A saved playlist",
       "type": "object",
       "properties": {
+        "uid": { "type": "string" },
         "name": { "type": "string" },
         "songs": {
           "type": "array",
@@ -26,13 +28,39 @@
               "id": { "type": "string" },
               "title": { "type": "string" },
               "artist": { "type": "string" },
+              "coverUrl": { "type": "string" },
+              "previewUrl": { "type": "string" },
               "url": { "type": "string" }
-            }
+            },
+            "required": ["id", "title", "artist"]
+          }
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "name", "songs", "createdAt"]
+    },
+    "ChatHistory": {
+      "title": "ChatHistory",
+      "description": "Chat history for a specific mode",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "mode": { "type": "string" },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": { "type": "string" },
+              "text": { "type": "string" },
+              "timestamp": { "type": "number" }
+            },
+            "required": ["role", "text", "timestamp"]
           }
         },
         "updatedAt": { "type": "number" }
       },
-      "required": ["songs"]
+      "required": ["uid", "mode", "messages", "updatedAt"]
     }
   },
   "firestore": {
@@ -40,13 +68,13 @@
       "schema": "User",
       "description": "User profile document"
     },
-    "/users/{userId}/active_playlist/current": {
-      "schema": "Playlist",
-      "description": "The current active playlist for the user"
-    },
-    "/users/{userId}/saved_playlists/{playlistId}": {
+    "/users/{userId}/playlists/{playlistId}": {
       "schema": "Playlist",
       "description": "Saved playlists for the user"
+    },
+    "/users/{userId}/chats/{mode}": {
+      "schema": "ChatHistory",
+      "description": "Chat history for each mode"
     }
   }
 }
