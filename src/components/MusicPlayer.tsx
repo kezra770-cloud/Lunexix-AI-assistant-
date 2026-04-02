@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, ListMusic, Volume2, Trash2, Music, ExternalLink, Save, FolderOpen, Edit2, Download, X, Check } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, ListMusic, Volume2, Trash2, Music, ExternalLink, Save, FolderOpen, Edit2, Download, X, Check, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactPlayer from 'react-player';
 import { cn } from '../lib/utils';
@@ -14,6 +14,7 @@ interface MusicPlayerProps {
   onRenamePlaylist: (index: number, newName: string) => void;
   onDeletePlaylist: (index: number) => void;
   onExportPlaylist: (index: number) => void;
+  onFindSimilar: (song: Song) => void;
   savedPlaylists: { name: string, songs: Song[] }[];
 }
 
@@ -26,6 +27,7 @@ export default function MusicPlayer({
   onRenamePlaylist,
   onDeletePlaylist,
   onExportPlaylist,
+  onFindSimilar,
   savedPlaylists
 }: MusicPlayerProps) {
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
@@ -142,9 +144,17 @@ export default function MusicPlayer({
                 {currentSong?.title || "No song selected"}
               </h4>
               {currentSong?.url && (
-                <a href={currentSong.url} target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-lunexix-primary transition-colors">
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+                <div className="flex items-center gap-2">
+                  <a href={currentSong.url} target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-lunexix-primary transition-colors">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button 
+                    onClick={() => onFindSimilar(currentSong)}
+                    className="text-[10px] bg-pink-500/10 text-pink-500 px-2 py-0.5 rounded-full hover:bg-pink-500/20 transition-all flex items-center gap-1"
+                  >
+                    <Sparkles className="w-2 h-2" /> Similar
+                  </button>
+                </div>
               )}
             </div>
             <p className="text-xs text-slate-400 truncate">

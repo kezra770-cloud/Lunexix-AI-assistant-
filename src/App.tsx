@@ -34,6 +34,7 @@ import { generateChatResponse } from './services/gemini';
 import LiveVoiceChat from './components/LiveVoiceChat';
 import MusicPlayer from './components/MusicPlayer';
 import VideoFeed from './components/VideoFeed';
+import MusicSearchFilters from './components/MusicSearchFilters';
 
 const MODES: { id: ChatMode; label: string; icon: any; color: string }[] = [
   { id: 'general', label: 'General', icon: Sparkles, color: 'text-lunexix-primary' },
@@ -106,6 +107,23 @@ export default function App() {
 
   const loadPlaylist = (songs: Song[]) => {
     setPlaylist(songs);
+  };
+
+  const handleMusicSearch = (filters: { genre: string; mood: string; year: string }) => {
+    let prompt = "Find some music for me.";
+    const parts = [];
+    if (filters.genre !== 'Any Genre') parts.push(`genre: ${filters.genre}`);
+    if (filters.mood !== 'Any Mood') parts.push(`mood: ${filters.mood}`);
+    if (filters.year !== 'Any Year') parts.push(`released in: ${filters.year}`);
+    
+    if (parts.length > 0) {
+      prompt = `Suggest some ${parts.join(', ')} music tracks. Please include specific song titles and artists.`;
+    }
+    handleSend(prompt);
+  };
+
+  const handleFindSimilar = (song: Song) => {
+    handleSend(`Find some tracks similar to "${song.title}" by ${song.artist}. Please include specific song titles and artists.`);
   };
 
   const scrollToBottom = () => {
@@ -365,22 +383,25 @@ export default function App() {
               </div>
               <div className="grid grid-cols-2 gap-3 w-full">
                 {mode === 'dj' ? (
-                  <>
-                    <button 
-                      onClick={() => handleSend("What are the top 5 trending tracks right now?")}
-                      className="p-4 glass-panel rounded-2xl text-sm text-slate-300 hover:bg-white/10 transition-all text-left flex items-center gap-3"
-                    >
-                      <Music className="w-4 h-4 text-pink-500" />
-                      "Trending tracks right now?"
-                    </button>
-                    <button 
-                      onClick={() => handleSend("Suggest some music based on my preference for electronic and house music.")}
-                      className="p-4 glass-panel rounded-2xl text-sm text-slate-300 hover:bg-white/10 transition-all text-left flex items-center gap-3"
-                    >
-                      <Sparkles className="w-4 h-4 text-pink-500" />
-                      "Suggest tracks for my vibe"
-                    </button>
-                  </>
+                  <div className="col-span-2 w-full space-y-6">
+                    <MusicSearchFilters onSearch={handleMusicSearch} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <button 
+                        onClick={() => handleSend("What are the top 5 trending tracks right now?")}
+                        className="p-4 glass-panel rounded-2xl text-sm text-slate-300 hover:bg-white/10 transition-all text-left flex items-center gap-3"
+                      >
+                        <Music className="w-4 h-4 text-pink-500" />
+                        "Trending tracks right now?"
+                      </button>
+                      <button 
+                        onClick={() => handleSend("Suggest some music based on my preference for electronic and house music.")}
+                        className="p-4 glass-panel rounded-2xl text-sm text-slate-300 hover:bg-white/10 transition-all text-left flex items-center gap-3"
+                      >
+                        <Sparkles className="w-4 h-4 text-pink-500" />
+                        "Suggest tracks for my vibe"
+                      </button>
+                    </div>
+                  </div>
                 ) : mode === 'social' ? (
                   <div className="col-span-2 w-full">
                     <VideoFeed />
@@ -619,6 +640,7 @@ export default function App() {
           onRenamePlaylist={renamePlaylist}
           onDeletePlaylist={deletePlaylist}
           onExportPlaylist={exportPlaylist}
+          onFindSimilar={handleFindSimilar}
           savedPlaylists={savedPlaylists}
         />
       )}
