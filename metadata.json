@@ -1,0 +1,5 @@
+{
+  "name": "Lunexix AI Assistant",
+  "description": "A multi-functional AI assistant featuring general chat, a specialized DJ mode with YouTube/SoundCloud playback, and real-time voice conversations powered by Gemini.",
+  "requestFramePermissions": ["microphone"]
+}

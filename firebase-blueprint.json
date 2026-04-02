@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Playlist": {
+      "title": "Playlist",
+      "description": "A collection of songs",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "songs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "artist": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["songs"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document"
+    },
+    "/users/{userId}/active_playlist/current": {
+      "schema": "Playlist",
+      "description": "The current active playlist for the user"
+    },
+    "/users/{userId}/saved_playlists/{playlistId}": {
+      "schema": "Playlist",
+      "description": "Saved playlists for the user"
+    }
+  }
+}
